@@ -7,8 +7,15 @@ function transform(root, originName, targetName) {
   return traverse((node, ctx, next) => {
 
     // TODO: 作业代码写在这里
-    if (node.type === 'xxx') {
+    const re = (node) => {
+      if (node.type === 'Identifier' && node.name === originName) {
+          node.name = targetName
+      }
     }
+    
+    if(node.type === 'VariableDeclarator' || node.type === 'FunctionDeclaration')  re(node.id)
+    if(node.type === 'MemberExpression')  re(node.object)
+    if(node.type === 'BinaryExpression')  (re(node.left), re(node.right))
 
     // 继续往下遍历
     return next(node, ctx)
