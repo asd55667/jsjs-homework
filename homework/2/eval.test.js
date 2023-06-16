@@ -15,6 +15,8 @@ test('测试表达式 - 初级挑战', t => {
     'true ? 1 : throwError()',
     'false ? throwError() : 2',
     '({ a: 1 + 2 + 3, b: 4 + 5, c: [1, 2, 3] })',
+    '(a => a+1)(2)',
+    '(a => b => a + b + 1)(1)(2)',
   ];
   for (sourceCode of sourceCodeList) {
     t.deepEqual(customerEval(sourceCode, baseEnv), eval(sourceCode));
