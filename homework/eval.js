@@ -56,11 +56,8 @@ function LogicalExpression(node, env) {
 function CallExpression(node, env) {
     const args = node.arguments.map((a) => evaluate(a, env));
     const callee = evaluate(node.callee, env);
-    try {
-        return callee(...args);
-    } catch (err) {
-        //
-    }
+    if (!callee) return
+    return callee(...args);
 }
 
 function ConditionalExpression(node, env) {
@@ -98,17 +95,28 @@ function ArrowFunctionExpression(node, env) {
 
 function AssignmentExpression(node, env) {
     const scope = env.currentClosure ? env.currentClosure : env
-    const { name } = node.left
-    if (scope[name]?.kind === 'const') {
-        throw new TypeError('Assignment to constant variable');
-    }
-    const right = evaluate(node.right, env);
-    let value = right
-    if (node.operator !== '=') {
-        value = eval(`${evaluate(node.left, env)} ${node.operator.slice(0, -1)} ${right}`)
-    }
-    updateValue(name, value, env)
-    return value
+    const { left, right } = node
+    const rightVal = evaluate(right, env);
+
+    if (left.type === 'Identifier') {
+        if (scope[left.name]?.kind === 'const') {
+            throw new TypeError('Assignment to constant variable');
+        }
+        let value = rightVal
+        if (node.operator !== '=') {
+            value = eval(`${evaluate(left, env)} ${node.operator.slice(0, -1)} ${rightVal}`)
+        }
+        updateValue(left.name, value, env)
+        return value
+    } else if (left.type === 'MemberExpression') {
+        const leftVal = evaluate(left.object, env);
+        leftVal[left.property.name] = rightVal
+        if (node.operator !== '=') {
+            leftVal[left.property.name] = eval(`${evaluate(left, env)} ${node.operator.slice(0, -1)} ${rightVal}`)
+        }
+        return leftVal[left.property.name]
+    };
+    throw new Error(`AssignmentExpression, left type ${node.left.type}`)
 }
 
 function SequenceExpression(node, env) {
@@ -130,10 +138,11 @@ function IfStatement(node, env) {
 
 function BlockStatement(node, env) {
     let ret;
-    node.body.forEach((el) => {
-        ret = evaluate(el, env);
-    });
-    return ret
+    for (const stmt of node.body) {
+        if (stmt.type === 'ReturnStatement') return evaluate(stmt, env);
+        ret = evaluate(stmt, env);
+    }
+    return ret;
 }
 
 function VariableDeclaration(node, env) {
@@ -158,38 +167,87 @@ function ForStatement(node, env) {
 
 function UpdateExpression(node, env) {
     const { argument } = node
-    let val = evaluate(argument, env);
-    switch (node.operator) {
-        case "++":
-            node.prefix ? ++val : val++; break;
-        case "--":
-            node.prefix ? --val : val--; break
-    }
+    if (argument.type !== 'Identifier') throw new SyntaxError('Invalid left-hand side expression in postfix operation')
 
-    if (argument.type === 'Identifier') {
-        updateValue(argument.name, val, env)
-    }
-
-    return val;
+    const old = evaluate(argument, env);
+    const val = node.operator === '++' ? old + 1 : old - 1
+    updateValue(argument.name, val, env)
+    return node.prefix ? val : old;
 }
 
 function WhileStatement(node, env) {
     while (evaluate(node.test, env)) {
-        evaluate(node.body, env);
+        try {
+            evaluate(node.body, env);
+        } catch (err) {
+            if (err.message === ' continue') continue
+        }
     }
 }
 
-function evaluate(node, env) {
-    try {
-        return eval(`${node.type}(node, env)`);
-    } catch (err) {
-        throw err
-        throw new Error(
-            `Unsupported Syntax ${node.type} at Location ${node.start}:${node.end}
-            ${err}
-            `
-        );
+function FunctionExpression(node, env) {
+    return (...args) => {
+        const scope = createClosure(env)
+        for (let i in node.params) {
+            scope[node.params[i].name] = { value: args[i], kind: 'let' };
+        }
+        const res = evaluate(node.body, { ...env });
+        dropClosure(env)
+        return res
+    };
+}
+
+function MemberExpression(node, env) {
+    const { object, property } = node
+
+    let member = evaluate(object, env)[property.name]
+    if (typeof member === 'function') {
+        member = (...args) => {
+            evaluate(object, env)[property.name](...args)
+        }
     }
+    return member
+}
+
+function SwitchStatement(node, env) {
+    const { discriminant, cases } = node
+    const cond = evaluate(discriminant, env)
+    for (const option of cases) {
+        if (cond == evaluate(option, env)) {
+            evaluate(option.consequent, env)
+        }
+    }
+}
+
+function ContinueStatement(node, env) {
+    throw Error('continue')
+}
+
+function TryStatement(node, env) {
+    try {
+        return evaluate(node.block, env)
+    } catch (err) {
+        const callee = evaluate(node.handler, env)
+        return callee(err)
+    } finally {
+        evaluate(node.finalizer, env)
+    }
+}
+
+function CatchClause(node, env) {
+    return (...args) => {
+        const { name } = node.param
+        env.currentClosure[name] = { value: args[0], kind: 'let' };
+        return evaluate(node.body, { ...env });
+    };
+}
+
+function ThrowStatement(node, env) {
+    throw evaluate(node.argument, env);
+}
+
+function evaluate(node, env) {
+    return eval(`${node.type}(node, env)`);
 }
 
 module.exports = evaluate
