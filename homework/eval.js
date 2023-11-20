@@ -1,3 +1,4 @@
+
 function createClosure(env) {
     const closure = Object.create(null)
     closure.parent = env.currentClosure ? env.currentClosure : env
@@ -19,6 +20,7 @@ function updateValue(name, value, env) {
         scope = scope.parent;
     }
     scope[name].value = value
+    if (scope[name].kind === 'var') env[name].value = value
 }
 
 function Literal(node) {
@@ -38,7 +40,8 @@ function Identifier(node, env) {
 function BinaryExpression(node, env) {
     const left = evaluate(node.left, env);
     const right = evaluate(node.right, env);
-    return eval(`${left} ${node.operator} ${right}`)
+    const escape = (v) => typeof v === 'string' && !v ? "\'\'" : v
+    return eval(`${escape(left)} ${node.operator} ${escape(right)}`)
 }
 
 function LogicalExpression(node, env) {
@@ -132,8 +135,7 @@ function IfStatement(node, env) {
     const test = evaluate(node.test, env);
     if (test) {
         return evaluate(node.consequent, env);
-    }
-    return evaluate(node.alternate, env);
+    } else if (node.alternate) return evaluate(node.alternate, env);
 }
 
 function BlockStatement(node, env) {
@@ -150,6 +152,9 @@ function VariableDeclaration(node, env) {
     declarations.forEach(decl => {
         let scope = env.currentClosure ? env.currentClosure : env
         scope[decl.id.name] = { value: evaluate(decl.init), kind };
+        if (kind === 'var') {
+            env[decl.id.name] = { value: evaluate(decl.init), kind };
+        }
     })
 }
 
@@ -158,10 +163,17 @@ function ReturnStatement(node, env) {
 }
 
 function ForStatement(node, env) {
-    evaluate(node.init, env);
-    while (evaluate(node.test, env)) {
-        evaluate(node.body, env);
-        evaluate(node.update, env);
+    const label = node?.label?.name;
+    for (evaluate(node.init, env); evaluate(node.test, env); evaluate(node.update, env)) {
+        try {
+            evaluate(node.body, env);
+        } catch (err) {
+            if (!err?.label || label === err.label) {
+                if (err.type === 'continue') continue
+                else if (err.type === 'break') return;
+                else throw err
+            } else throw err
+        }
     }
 }
 
@@ -180,7 +192,12 @@ function WhileStatement(node, env) {
         try {
             evaluate(node.body, env);
         } catch (err) {
-            if (err.message === ' continue') continue
+            if (err.type === ' continue') continue
+            if (!err?.label || label === err.label) {
+                if (err.type === 'continue') continue
+                else if (err.type === 'break') return;
+                else throw err
+            } else throw err
         }
     }
 }
@@ -213,14 +230,16 @@ function SwitchStatement(node, env) {
     const { discriminant, cases } = node
     const cond = evaluate(discriminant, env)
     for (const option of cases) {
-        if (cond == evaluate(option, env)) {
-            evaluate(option.consequent, env)
+        if (cond == evaluate(option.test, env)) {
+            option.consequent.forEach(stmt => evaluate(stmt, env))
         }
     }
 }
 
+
+
 function ContinueStatement(node, env) {
-    throw Error('continue')
+    throw { type: 'continue', label: node?.label?.name }
 }
 
 function TryStatement(node, env) {
@@ -244,6 +263,15 @@ function CatchClause(node, env) {
 
 function ThrowStatement(node, env) {
     throw evaluate(node.argument, env);
+}
+
+function LabeledStatement(node, env) {
+    node.body.label = node.label
+    evaluate(node.body, env);
+}
+
+function BreakStatement(node, env) {
+    throw { type: 'break', label: node?.label?.name }
 }
 
 function evaluate(node, env) {
