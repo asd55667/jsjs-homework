@@ -97,7 +97,7 @@ function ArrowFunctionExpression(node, env) {
 }
 
 function AssignmentExpression(node, env) {
-    const scope = env.currentClosure ? env.currentClosure : env
+    const scope = env.currentClosure ?? env
     const { left, right } = node
     const rightVal = evaluate(right, env);
 
@@ -150,7 +150,7 @@ function BlockStatement(node, env) {
 function VariableDeclaration(node, env) {
     const { kind, declarations } = node
     declarations.forEach(decl => {
-        let scope = env.currentClosure ? env.currentClosure : env
+        const scope = env.currentClosure ?? env
         scope[decl.id.name] = { value: evaluate(decl.init), kind };
         if (kind === 'var') {
             env[decl.id.name] = { value: evaluate(decl.init), kind };
@@ -236,8 +236,6 @@ function SwitchStatement(node, env) {
     }
 }
 
-
-
 function ContinueStatement(node, env) {
     throw { type: 'continue', label: node?.label?.name }
 }
@@ -272,6 +270,10 @@ function LabeledStatement(node, env) {
 
 function BreakStatement(node, env) {
     throw { type: 'break', label: node?.label?.name }
+}
+
+function Program(node, env) {
+    node.body.forEach(stmt => evaluate(stmt, env));
 }
 
 function evaluate(node, env) {
