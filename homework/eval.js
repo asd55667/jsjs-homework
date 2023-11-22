@@ -1,3 +1,6 @@
+const isFunc = (v) => typeof v === 'function'
+
+const fMap = Object.create(null)
 
 function createClosure(env) {
     const closure = Object.create(null)
@@ -40,7 +43,7 @@ function Identifier(node, env) {
 function BinaryExpression(node, env) {
     const left = evaluate(node.left, env);
     const right = evaluate(node.right, env);
-    const escape = (v) => typeof v === 'string' && !v ? "\'\'" : v
+    const escape = (v) => typeof v === 'string' ? `\'${v}\'` : v
     return eval(`${escape(left)} ${node.operator} ${escape(right)}`)
 }
 
@@ -88,10 +91,17 @@ function ExpressionStatement(node, env) {
 function ArrowFunctionExpression(node, env) {
     return (...args) => {
         const scope = createClosure(env)
+        let parent = scope.parent
+        while (parent && !parent['global']) {
+            parent = parent?.parent
+        }
+        scope['global'] = parent?.['global']
+
         for (let i in node.params) {
             scope[node.params[i].name] = { value: args[i], kind: 'let' };
         }
         const res = evaluate(node.body, { ...env });
+        dropClosure(env)
         return res
     };
 }
@@ -151,9 +161,10 @@ function VariableDeclaration(node, env) {
     const { kind, declarations } = node
     declarations.forEach(decl => {
         const scope = env.currentClosure ?? env
-        scope[decl.id.name] = { value: evaluate(decl.init), kind };
+        const value = decl.init ? evaluate(decl.init, env) : undefined
+        scope[decl.id.name] = { value, kind };
         if (kind === 'var') {
-            env[decl.id.name] = { value: evaluate(decl.init), kind };
+            env[decl.id.name] = { value, kind };
         }
     })
 }
@@ -204,11 +215,15 @@ function WhileStatement(node, env) {
 
 function FunctionExpression(node, env) {
     return (...args) => {
-        const scope = createClosure(env)
+        const cache = fMap[node.id.name]
+        const scope = createClosure(env);
+        scope['global'] = cache ? { value: cache.self } : Object.create(null);
         for (let i in node.params) {
             scope[node.params[i].name] = { value: args[i], kind: 'let' };
         }
         const res = evaluate(node.body, { ...env });
+        if (cache?.type === 'new' && !res) return scope['global']
+        if (cache?.type !== 'bind') delete fMap[node.id.name]
         dropClosure(env)
         return res
     };
@@ -216,11 +231,16 @@ function FunctionExpression(node, env) {
 
 function MemberExpression(node, env) {
     const { object, property } = node
-
-    let member = evaluate(object, env)[property.name]
-    if (typeof member === 'function') {
+    const obj = evaluate(object, env)
+    let member = obj[property.name]
+    if (isFunc(member)) {
         member = (...args) => {
-            evaluate(object, env)[property.name](...args)
+            if (isFunc(obj)) {
+                const { name } = property
+                if (name === 'call' || name === 'apply') fMap[object.name] = { self: args[0], type: 'bind' }
+                if (name === 'bind') fMap[object.name] = { self: args[0], type: 'bind' }
+            }
+            return obj[property.name](...args)
         }
     }
     return member
@@ -274,6 +294,42 @@ function BreakStatement(node, env) {
 
 function Program(node, env) {
     node.body.forEach(stmt => evaluate(stmt, env));
+}
+
+function ThisExpression(node, env) {
+    let scope = env.currentClosure ?? env
+    while (scope.parent && !(['global'] in scope)) {
+        scope = scope.parent
+    }
+    return scope['global']?.value
+}
+
+function FunctionDeclaration(node, env) {
+    const scope = env.currentClosure ?? env
+    node.type = 'FunctionExpression'
+    const callee = evaluate(node, env)
+    const fn = function (...args) {
+        return callee(...args)
+    }
+
+    Object.defineProperty(fn, 'name', { value: node.id.name })
+    Object.defineProperty(fn, 'length', { value: node.params.length })
+    scope[node.id.name] = { value: fn, kind: 'var' }
+}
+
+
+function NewExpression(node, env) {
+    const args = node.arguments.map((a) => evaluate(a, env));
+    const callee = evaluate(node.callee, env)
+    fMap[node.callee.name] = { self: { constructor: callee }, type: 'new', name: node.callee.name }
+    return callee(...args)
+}
+
+function MetaProperty(node, env) {
+    const scope = env.currentClosure ?? env;
+    if (node.meta.name === 'new' && node.property.name === 'target') {
+        return scope['global'].value.constructor
+    }
 }
 
 function evaluate(node, env) {

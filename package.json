@@ -11,7 +11,7 @@
     "ava": "^4.0.1"
   },
   "scripts": {
-    "test-final": "ava final/test/array -w",
+    "test-final": "ava final/test/ar* -w",
     "test-homework-3": "ava homework/3/eval.test.js -w",
     "test-homework-2": "ava homework/2/eval.test.js -w",
     "test-homework-1": "ava homework/1/rename.test.js"

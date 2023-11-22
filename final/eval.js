@@ -4,7 +4,7 @@ class Scope {
   constructor(initial /* 初始化变量 */, parent) {
     const self = {}
     if (typeof initial === 'object') Object.assign(self, normalize(initial))
-    if (typeof parent === 'object') Object.assign(self, normalize(parent))
+    if (typeof parent === 'object') Object.assign(self, parent)
     return self
   }
 }
