@@ -7,6 +7,7 @@ function throwError() {
 
 const baseEnv = { throwError };
 
+
 test("控制流 - 初级挑战", (t) => {
   const sourceCodeList = [
     "(() => { let a = 3; if (a > 0) { return 1 } else { return 0 } })()",
@@ -89,6 +90,20 @@ test('测试声明与控制流 - 终极挑战', t => {
 
 test('测试声明与控制流 - 超纲挑战', t => {
   const sourceCode =
-    '(() => { loop1: for (var i = 0; i < 3; i++) { loop2: for (var m = 1; m < 3; m++) { if (m % 2 === 0) { break loop1; } loop3: for (var y = 1; y < 10; y++) { if (y % 5 === 0) { continue loop2; } } } } return { i, m, y } })()';
+    `(() => {
+      loop1: for (var i = 0; i < 3; i++) {
+          loop2: for (var m = 1; m < 3; m++) {
+              if (m % 2 === 0) {
+                  break loop1;
+              }
+              loop3: for (var y = 1; y < 10; y++) {
+                  if (y % 5 === 0) {
+                      continue loop2;
+                  }
+              }
+          }
+      }
+      return { i, m, y }
+  })()`;
   t.deepEqual(customerEval(sourceCode), eval(sourceCode))
 })

@@ -23,7 +23,11 @@ function updateValue(name, value, env) {
         scope = scope.parent;
     }
     scope[name].value = value
-    if (scope[name].kind === 'var') env[name].value = value
+    if (scope[name].kind === 'var') {
+        let root = env;
+        while (root?.parent) root = root.parent
+        if (root[name]) root[name].value = value
+    }
 }
 
 function Literal(node) {
@@ -101,7 +105,13 @@ function ArrowFunctionExpression(node, env) {
             scope[node.params[i].name] = { value: args[i], kind: 'let' };
         }
         node.body.scope = true
-        const res = evaluate(node.body, { ...env });
+        let res;
+        try {
+            res = evaluate(node.body, { ...env });
+        } catch (err) {
+            if (err.type === 'return') res = err.value
+            else throw err
+        }
         dropClosure(env)
         return res
     };
@@ -151,10 +161,7 @@ function IfStatement(node, env) {
 
 function BlockStatement(node, env) {
     const scope = !node.scope ? createClosure(env) : env
-    for (const stmt of node.body) {
-        if (stmt.type === 'ReturnStatement') return evaluate(stmt, scope);
-        evaluate(stmt, env);
-    }
+    for (const stmt of node.body) evaluate(stmt, scope);
     !node.scope && dropClosure(env)
 }
 
@@ -167,13 +174,15 @@ function VariableDeclaration(node, env) {
         const value = decl.init ? evaluate(decl.init, env) : undefined
         scope[name] = { value, kind };
         if (kind === 'var') {
-            env[name] = { value, kind };
+            let root = env
+            while (root?.parent) root = root.parent
+            root[name] = { value, kind };
         }
     })
 }
 
 function ReturnStatement(node, env) {
-    return evaluate(node.argument, env)
+    throw { type: 'return', value: evaluate(node.argument, env) }
 }
 
 function ForStatement(node, env) {
@@ -225,7 +234,13 @@ function FunctionExpression(node, env) {
             scope[node.params[i].name] = { value: args[i], kind: 'let' };
         }
         node.body.scope = true
-        const res = evaluate(node.body, { ...env });
+        let res
+        try {
+            res = evaluate(node.body, { ...env });
+        } catch (err) {
+            if (err.type === 'return') res = err.value
+            else throw err;
+        }
         if (cache?.type === 'new' && !res) {
             const { value } = scope['global']
             value.__proto__ = value.constructor.prototype
