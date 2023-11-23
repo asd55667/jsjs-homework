@@ -151,13 +151,11 @@ function IfStatement(node, env) {
 
 function BlockStatement(node, env) {
     const scope = !node.scope ? createClosure(env) : env
-    let ret;
     for (const stmt of node.body) {
         if (stmt.type === 'ReturnStatement') return evaluate(stmt, scope);
-        ret = evaluate(stmt, env);
+        evaluate(stmt, env);
     }
     !node.scope && dropClosure(env)
-    return ret;
 }
 
 function VariableDeclaration(node, env) {
@@ -228,7 +226,11 @@ function FunctionExpression(node, env) {
         }
         node.body.scope = true
         const res = evaluate(node.body, { ...env });
-        if (cache?.type === 'new' && !res) return scope['global']
+        if (cache?.type === 'new' && !res) {
+            const { value } = scope['global']
+            value.__proto__ = value.constructor.prototype
+            return value
+        }
         if (cache?.type !== 'bind') delete fMap[node.id.name]
         dropClosure(env)
         return res
@@ -328,7 +330,7 @@ function NewExpression(node, env) {
     const args = node.arguments.map((a) => evaluate(a, env));
     const callee = evaluate(node.callee, env)
     fMap[node.callee.name] = { self: { constructor: callee }, type: 'new', name: node.callee.name }
-    return callee(...args)
+    return new callee(...args)
 }
 
 function MetaProperty(node, env) {
