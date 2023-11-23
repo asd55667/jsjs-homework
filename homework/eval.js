@@ -100,6 +100,7 @@ function ArrowFunctionExpression(node, env) {
         for (let i in node.params) {
             scope[node.params[i].name] = { value: args[i], kind: 'let' };
         }
+        node.body.scope = true
         const res = evaluate(node.body, { ...env });
         dropClosure(env)
         return res
@@ -149,11 +150,13 @@ function IfStatement(node, env) {
 }
 
 function BlockStatement(node, env) {
+    const scope = !node.scope ? createClosure(env) : env
     let ret;
     for (const stmt of node.body) {
-        if (stmt.type === 'ReturnStatement') return evaluate(stmt, env);
+        if (stmt.type === 'ReturnStatement') return evaluate(stmt, scope);
         ret = evaluate(stmt, env);
     }
+    !node.scope && dropClosure(env)
     return ret;
 }
 
@@ -161,10 +164,12 @@ function VariableDeclaration(node, env) {
     const { kind, declarations } = node
     declarations.forEach(decl => {
         const scope = env.currentClosure ?? env
+        const { name } = decl.id
+        if (name in scope && scope[name].kind === 'const') throw new Error(`Uncaught SyntaxError: Identifier ${name} has already been declared`);
         const value = decl.init ? evaluate(decl.init, env) : undefined
-        scope[decl.id.name] = { value, kind };
+        scope[name] = { value, kind };
         if (kind === 'var') {
-            env[decl.id.name] = { value, kind };
+            env[name] = { value, kind };
         }
     })
 }
@@ -221,6 +226,7 @@ function FunctionExpression(node, env) {
         for (let i in node.params) {
             scope[node.params[i].name] = { value: args[i], kind: 'let' };
         }
+        node.body.scope = true
         const res = evaluate(node.body, { ...env });
         if (cache?.type === 'new' && !res) return scope['global']
         if (cache?.type !== 'bind') delete fMap[node.id.name]

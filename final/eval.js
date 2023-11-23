@@ -13,7 +13,7 @@ function normalize(obj) {
   if (typeof obj !== 'object') return
   Object.keys(obj).forEach((key) => {
     const value = obj[key]
-    obj[key] = { value, kind: 'var' }
+    obj[key] = { value, kind: 'const' }
   })
   return obj
 }
@@ -29,7 +29,7 @@ function customEval(code, parent) {
   }, parent);
 
   const node = acorn.parse(code, {
-    ecmaVersion: 6
+    ecmaVersion: 8
   })
   evaluate(node, scope);
   // return scope.get('module').exports;
