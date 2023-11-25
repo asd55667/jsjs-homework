@@ -295,10 +295,19 @@ function MemberExpression(node, env) {
 function SwitchStatement(node, env) {
     const { discriminant, cases } = node
     const cond = evaluate(discriminant, env)
-    for (const option of cases) {
-        if (cond == evaluate(option.test, env)) {
-            option.consequent.forEach(stmt => evaluate(stmt, env))
+    createClosure(env);
+    try {
+        for (const option of cases) {
+            const { test } = option
+            if ((test && cond === evaluate(test, env)) || !test) {
+                option.consequent.forEach(stmt => evaluate(stmt, env))
+            }
         }
+    } catch (err) {
+        if (err.type === 'break') return
+        else throw err
+    } finally {
+        dropClosure(env)
     }
 }
 
