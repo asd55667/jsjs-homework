@@ -2,6 +2,11 @@ const isFunc = (v) => typeof v === 'function'
 
 const fMap = Object.create(null)
 
+function configureFu(fn, node) {
+    Object.defineProperty(fn, 'name', { value: node.id.name })
+    Object.defineProperty(fn, 'length', { value: node.params.length })
+}
+
 function createClosure(env) {
     const closure = Object.create(null)
     closure.parent = env.currentClosure ? env.currentClosure : env
@@ -78,8 +83,23 @@ function ConditionalExpression(node, env) {
 function ObjectExpression(node, env) {
     const obj = {};
     for (const p of node.properties) {
-        const key = p.key.name;
-        obj[key] = evaluate(p.value, env, {});
+        if (['FunctionExpression'].includes(p.value.type)) p.value.id = p.key
+        if (p.kind === 'get') {
+            Object.defineProperty(obj, p.key.name, {
+                get() {
+                    return evaluate(p.value, env).apply(obj);
+                }
+            })
+        } else if (p.kind === 'set') {
+            Object.defineProperty(obj, p.key.name, {
+                set(v) {
+                    evaluate(p.value, env).call(obj, v);
+                    return v
+                }
+            })
+        } else {
+            obj[p.key.name] = evaluate(p.value, env);
+        }
     }
     return obj;
 }
@@ -226,10 +246,10 @@ function WhileStatement(node, env) {
 }
 
 function FunctionExpression(node, env) {
-    return (...args) => {
+    const fn = function (...args) {
         const cache = fMap[node.id.name]
         const scope = createClosure(env);
-        scope['global'] = cache ? { value: cache.self } : Object.create(null);
+        scope['global'] = cache ? { value: cache.self } : { value: this }
         for (let i in node.params) {
             scope[node.params[i].name] = { value: args[i], kind: 'let' };
         }
@@ -250,6 +270,8 @@ function FunctionExpression(node, env) {
         dropClosure(env)
         return res
     };
+    configureFu(fn, node)
+    return fn
 }
 
 function MemberExpression(node, env) {
@@ -266,6 +288,7 @@ function MemberExpression(node, env) {
             return obj[property.name](...args)
         }
     }
+
     return member
 }
 
@@ -334,9 +357,7 @@ function FunctionDeclaration(node, env) {
     const fn = function (...args) {
         return callee(...args)
     }
-
-    Object.defineProperty(fn, 'name', { value: node.id.name })
-    Object.defineProperty(fn, 'length', { value: node.params.length })
+    configureFu(fn, node)
     scope[node.id.name] = { value: fn, kind: 'var' }
 }
 
