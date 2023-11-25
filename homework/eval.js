@@ -1,12 +1,21 @@
 const isFunc = (v) => typeof v === 'function'
 
-const fMap = Object.create(null)
+const fMap = Object.create(null);
+
+function getRoot(env) {
+    let root = env
+    while (root?.parent) root = root.parent
+    return root
+}
 
 function hoist(node, env) {
     const scope = env.currentClosure ?? env;
     if (node.type === 'FunctionDeclaration') FunctionDeclaration(node, env);
     else if (node.type === 'VariableDeclaration' && node.kind === 'var') {
-        for (const decl of node.declarations) scope[decl.id.name] = { value: undefined, kind: 'var' };
+        for (const decl of node.declarations) {
+            if (['global'].includes(decl.id.name)) continue
+            scope[decl.id.name] = { value: undefined, kind: 'var' };
+        }
     }
 }
 
@@ -35,11 +44,16 @@ function updateValue(name, value, env) {
     while (scope.parent && !(name in scope)) {
         scope = scope.parent;
     }
-    scope[name].value = value
-    if (scope[name].kind === 'var') {
-        let root = env;
-        while (root?.parent) root = root.parent
-        if (root[name]) root[name].value = value
+
+    if (name in scope) {
+        scope[name].value = value
+    } else {
+        const root = getRoot(env)
+        if (root[name]) {
+            if (root[name].kind === 'const') throw new TypeError('Assignment to constant variable');
+            root[name].value = value
+        }
+        else root[name] = { value, kind: 'var' }
     }
 }
 
@@ -49,13 +63,14 @@ function Literal(node) {
 
 function Identifier(node, env) {
     const { name } = node
+    if (name === 'undefined') return undefined
+    if (node.raw === 'null') return null
+
     let scope = env.currentClosure ?? env
     while (scope.parent && !(name in scope)) {
         scope = scope.parent
     }
 
-    if (name === 'undefined') return undefined
-    if (node.raw === 'null') return null
     if (!scope[name]) {
         throw new SyntaxError(`Uncaught ReferenceError: ${name} is not defined at Location ${node.start}:${node.end}`);
     }
@@ -204,14 +219,14 @@ function VariableDeclaration(node, env) {
     declarations.forEach(decl => {
         const scope = env.currentClosure ?? env
         const { name } = decl.id
-        if (name in scope && scope[name].kind === 'const') throw new Error(`Uncaught SyntaxError: Identifier ${name} has already been declared`);
         const value = decl.init ? evaluate(decl.init, env) : undefined
-        scope[name] = { value, kind };
         if (kind === 'var') {
-            let root = env
-            while (root?.parent) root = root.parent
+            if (['global'].includes(name)) return
+            const root = getRoot(env)
             root[name] = { value, kind };
         }
+        if (name in scope && scope[name].kind === 'const') throw new Error(`Uncaught SyntaxError: Identifier ${name} has already been declared`);
+        scope[name] = { value, kind };
     })
 }
 
@@ -270,7 +285,7 @@ function FunctionExpression(node, env) {
         node.body.scope = true
         let res
         try {
-            res = evaluate(node.body, { ...env });
+            res = evaluate(node.body, { ...scope });
         } catch (err) {
             if (err.type === 'return') res = err.value
             else throw err;
