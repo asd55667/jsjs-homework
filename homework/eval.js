@@ -2,6 +2,16 @@ const isFunc = (v) => typeof v === 'function'
 
 const fMap = Object.create(null)
 
+function hoist(node, env) {
+    const scope = env.currentClosure ?? env;
+    if (node.type === 'FunctionDeclaration') {
+        scope[node.id.name] = () => ({ value: undefined, kind: 'var' });
+        return
+    } else if (node.type === 'VariableDeclaration' && node.kind === 'var') {
+        for (const decl of node.declarations) scope[decl.id.name] = { value: undefined, kind: 'var' };
+    }
+}
+
 function configureFu(fn, node) {
     Object.defineProperty(fn, 'name', { value: node.id.name })
     Object.defineProperty(fn, 'length', { value: node.params.length })
@@ -46,7 +56,12 @@ function Identifier(node, env) {
         scope = scope.parent
     }
 
-    return scope[name]?.value
+    if (name === 'undefined') return undefined
+    if (node.raw === 'null') return null
+    if (!scope[name]) {
+        throw new SyntaxError(`Uncaught ReferenceError: ${name} is not defined at Location ${node.start}:${node.end}`);
+    }
+    return scope[name].value
 }
 
 function BinaryExpression(node, env) {
@@ -348,6 +363,7 @@ function BreakStatement(node, env) {
 }
 
 function Program(node, env) {
+    node.body.forEach(stmt => hoist(stmt, env));
     node.body.forEach(stmt => evaluate(stmt, env));
 }
 
