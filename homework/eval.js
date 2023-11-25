@@ -4,17 +4,15 @@ const fMap = Object.create(null)
 
 function hoist(node, env) {
     const scope = env.currentClosure ?? env;
-    if (node.type === 'FunctionDeclaration') {
-        scope[node.id.name] = () => ({ value: undefined, kind: 'var' });
-        return
-    } else if (node.type === 'VariableDeclaration' && node.kind === 'var') {
+    if (node.type === 'FunctionDeclaration') FunctionDeclaration(node, env);
+    else if (node.type === 'VariableDeclaration' && node.kind === 'var') {
         for (const decl of node.declarations) scope[decl.id.name] = { value: undefined, kind: 'var' };
     }
 }
 
 function configureFu(fn, node) {
-    Object.defineProperty(fn, 'name', { value: node.id.name })
-    Object.defineProperty(fn, 'length', { value: node.params.length })
+    if (node?.id?.name) Object.defineProperty(fn, 'name', { value: node.id.name })
+    if (node?.params?.length) Object.defineProperty(fn, 'length', { value: node.params.length })
 }
 
 function createClosure(env) {
@@ -195,8 +193,9 @@ function IfStatement(node, env) {
 }
 
 function BlockStatement(node, env) {
-    const scope = !node.scope ? createClosure(env) : env
-    for (const stmt of node.body) evaluate(stmt, scope);
+    !node.scope ? createClosure(env) : env
+    for (const stmt of node.body) hoist(stmt, env);
+    for (const stmt of node.body) evaluate(stmt, env);
     !node.scope && dropClosure(env)
 }
 
@@ -262,7 +261,7 @@ function WhileStatement(node, env) {
 
 function FunctionExpression(node, env) {
     const fn = function (...args) {
-        const cache = fMap[node.id.name]
+        const cache = fMap[node?.id?.name]
         const scope = createClosure(env);
         scope['global'] = cache ? { value: cache.self } : { value: this }
         for (let i in node.params) {
@@ -281,7 +280,7 @@ function FunctionExpression(node, env) {
             value.__proto__ = value.constructor.prototype
             return value
         }
-        if (cache?.type !== 'bind') delete fMap[node.id.name]
+        if (cache?.type !== 'bind') delete fMap[node?.id?.name]
         dropClosure(env)
         return res
     };
@@ -297,7 +296,7 @@ function MemberExpression(node, env) {
         member = (...args) => {
             if (isFunc(obj)) {
                 const { name } = property
-                if (name === 'call' || name === 'apply') fMap[object.name] = { self: args[0], type: 'bind' }
+                if (name === 'call' || name === 'apply') fMap[object.name] = { self: args[0], type: 'call' }
                 if (name === 'bind') fMap[object.name] = { self: args[0], type: 'bind' }
             }
             return obj[property.name](...args)
