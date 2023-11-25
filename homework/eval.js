@@ -250,19 +250,41 @@ function ForStatement(node, env) {
 }
 
 function UpdateExpression(node, env) {
-    const { argument } = node
-    if (argument.type !== 'Identifier') throw new SyntaxError('Invalid left-hand side expression in postfix operation')
+    let { argument } = node
+    if (!['Identifier', 'MemberExpression'].includes(argument.type)) throw new SyntaxError('Invalid left-hand side expression in postfix operation')
 
     const old = evaluate(argument, env);
-    const val = node.operator === '++' ? old + 1 : old - 1
-    updateValue(argument.name, val, env)
+    let val = node.operator === '++' ? old + 1 : old - 1
+    let name = argument.name
+    if (argument.type === 'MemberExpression') {
+        const names = []
+        while (argument.type === 'MemberExpression') {
+            console.assert(argument.property.type === 'Identifier')
+            if (argument.property.computed) names.push(evaluate(argument.property, env))
+            else names.push(argument.property.name)
+            argument = argument.object
+        }
+        console.assert(argument.type === 'Identifier')
+        const obj = evaluate(argument, env)
+
+        names.reduce((v, name, idx) => {
+            const sub = names.slice(idx + 1).reverse().reduce((obj, k) => obj[k], obj)
+            sub[name] = v
+            return sub
+        }, val)
+        val = obj
+        name = argument.name
+    }
+    updateValue(name, val, env)
     return node.prefix ? val : old;
 }
 
 function WhileStatement(node, env) {
+    const label = node?.label?.name;
+    const scope = createClosure(env);
     while (evaluate(node.test, env)) {
         try {
-            evaluate(node.body, env);
+            evaluate(node.body, scope);
         } catch (err) {
             if (err.type === ' continue') continue
             if (!err?.label || label === err.label) {
@@ -270,8 +292,10 @@ function WhileStatement(node, env) {
                 else if (err.type === 'break') return;
                 else throw err
             } else throw err
+        } finally {
         }
     }
+    dropClosure(env);
 }
 
 function FunctionExpression(node, env) {
