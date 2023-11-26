@@ -434,7 +434,6 @@ function FunctionDeclaration(node, env) {
     scope[node.id.name] = { value: fn, kind: 'var' }
 }
 
-
 function NewExpression(node, env) {
     const args = node.arguments.map((a) => evaluate(a, env));
     const callee = evaluate(node.callee, env)
@@ -470,6 +469,21 @@ function UnaryExpression(node, env) {
         if (err instanceof SyntaxError && err.message.includes('Uncaught ReferenceError')) return 'undefined';
         else throw err
     }
+}
+
+function DoWhileStatement(node, env) {
+    const label = node?.label?.name;
+    do {
+        try {
+            evaluate(node.body, env)
+        } catch (err) {
+            if (!err?.label || label === err.label) {
+                if (err.type === 'continue') continue
+                else if (err.type === 'break') return;
+                else throw err
+            } else throw err
+        }
+    } while (evaluate(node.test, env));
 }
 
 function evaluate(node, env) {
