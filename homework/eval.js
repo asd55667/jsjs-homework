@@ -2,6 +2,20 @@ const isFunc = (v) => typeof v === 'function'
 
 const fMap = Object.create(null);
 
+function getMemberData(node, env) {
+    let member = node
+    const names = []
+    while (member.type === 'MemberExpression') {
+        console.assert(member.property.type === 'Identifier')
+        if (member.computed) names.push(evaluate(member.property, env))
+        else names.push(member.property.name)
+        member = member.object
+    }
+    console.assert(member.type === 'Identifier')
+    const obj = evaluate(member, env)
+    return [obj, names]
+}
+
 function getRoot(env) {
     let root = env
     while (root?.parent) root = root.parent
@@ -236,7 +250,10 @@ function ReturnStatement(node, env) {
 
 function ForStatement(node, env) {
     const label = node?.label?.name;
-    for (evaluate(node.init, env); evaluate(node.test, env); evaluate(node.update, env)) {
+    for (node.init ? evaluate(node.init, env) : () => { };
+        node.test ? evaluate(node.test, env) : () => { };
+        node.update ? evaluate(node.update, env) : () => { }
+    ) {
         try {
             evaluate(node.body, env);
         } catch (err) {
@@ -257,16 +274,7 @@ function UpdateExpression(node, env) {
     let val = node.operator === '++' ? old + 1 : old - 1
     let name = argument.name
     if (argument.type === 'MemberExpression') {
-        const names = []
-        while (argument.type === 'MemberExpression') {
-            console.assert(argument.property.type === 'Identifier')
-            if (argument.property.computed) names.push(evaluate(argument.property, env))
-            else names.push(argument.property.name)
-            argument = argument.object
-        }
-        console.assert(argument.type === 'Identifier')
-        const obj = evaluate(argument, env)
-
+        const [obj, names] = getMemberData(argument, env);
         names.reduce((v, name, idx) => {
             const sub = names.slice(idx + 1).reverse().reduce((obj, k) => obj[k], obj)
             sub[name] = v
@@ -328,21 +336,22 @@ function FunctionExpression(node, env) {
 }
 
 function MemberExpression(node, env) {
-    const { object, property } = node
-    const obj = evaluate(object, env)
-    let member = obj[property.name]
-    if (isFunc(member)) {
-        member = (...args) => {
+    const [obj, names] = getMemberData(node, env)
+    const name = names[0];
+
+    let value = names.slice().reverse().reduce((v, key) => v[key], obj)
+    if (isFunc(value)) {
+        value = (...args) => {
             if (isFunc(obj)) {
-                const { name } = property
-                if (name === 'call' || name === 'apply') fMap[object.name] = { self: args[0], type: 'call' }
-                if (name === 'bind') fMap[object.name] = { self: args[0], type: 'bind' }
+                if (name === 'call' || name === 'apply') fMap[node.object.name] = { self: args[0], type: 'call' }
+                if (name === 'bind') fMap[node.object.name] = { self: args[0], type: 'bind' }
             }
-            return obj[property.name](...args)
+            const sub = names.slice(0, -1).reverse().reduce((v, key) => v[key], obj)
+            return sub[name](...args)
         }
     }
 
-    return member
+    return value
 }
 
 function SwitchStatement(node, env) {
@@ -445,15 +454,7 @@ function UnaryExpression(node, env) {
         let { operator, argument } = node
         if (operator === 'delete' && argument.type === 'Identifier') return false
         if (operator === 'delete' && argument.type === 'MemberExpression') {
-            const names = []
-            while (argument.type === 'MemberExpression') {
-                console.assert(argument.property.type === 'Identifier')
-                if (argument.property.computed) names.push(evaluate(argument.property, env))
-                else names.push(argument.property.name)
-                argument = argument.object
-            }
-            console.assert(argument.type === 'Identifier')
-            const obj = evaluate(argument, env)
+            const [obj, names] = getMemberData(argument, env)
             names.reduce((v, name, idx) => {
                 const sub = names.slice(idx + 1).reverse().reduce((obj, k) => obj[k], obj)
                 if (v === undefined) delete sub[name];
