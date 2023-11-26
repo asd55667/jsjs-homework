@@ -439,6 +439,37 @@ function MetaProperty(node, env) {
     }
 }
 
+function UnaryExpression(node, env) {
+    try {
+        let { operator, argument } = node
+        if (operator === 'delete' && argument.type === 'Identifier') return false
+        if (operator === 'delete' && argument.type === 'MemberExpression') {
+            const names = []
+            while (argument.type === 'MemberExpression') {
+                console.assert(argument.property.type === 'Identifier')
+                if (argument.property.computed) names.push(evaluate(argument.property, env))
+                else names.push(argument.property.name)
+                argument = argument.object
+            }
+            console.assert(argument.type === 'Identifier')
+            const obj = evaluate(argument, env)
+            names.reduce((v, name, idx) => {
+                const sub = names.slice(idx + 1).reverse().reduce((obj, k) => obj[k], obj)
+                if (v === undefined) delete sub[name];
+                else sub[name] = v
+                return sub
+            }, undefined)
+            updateValue(argument.name, obj, env);
+            return true;
+        }
+        const val = evaluate(argument, env)
+        return eval(`${operator} ${val}`)
+    } catch (err) {
+        if (err instanceof SyntaxError && err.message.includes('Uncaught ReferenceError')) return 'undefined';
+        else throw err
+    }
+}
+
 function evaluate(node, env) {
     return eval(`${node.type}(node, env)`);
 }
