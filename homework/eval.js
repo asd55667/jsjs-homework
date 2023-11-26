@@ -372,10 +372,11 @@ function TryStatement(node, env) {
     try {
         return evaluate(node.block, env)
     } catch (err) {
+        if (['continue', 'return', 'break'].includes(err?.type)) throw err
         const callee = evaluate(node.handler, env)
         return callee(err)
     } finally {
-        evaluate(node.finalizer, env)
+        node.finalizer && evaluate(node.finalizer, env)
     }
 }
 
@@ -383,7 +384,7 @@ function CatchClause(node, env) {
     return (...args) => {
         const { name } = node.param
         env.currentClosure[name] = { value: args[0], kind: 'let' };
-        return evaluate(node.body, { ...env });
+        return evaluate(node.body, env);
     };
 }
 
