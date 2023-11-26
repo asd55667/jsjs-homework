@@ -325,6 +325,8 @@ function FunctionExpression(node, env) {
         if (cache?.type === 'new' && !res) {
             const { value } = scope['global']
             value.__proto__ = value.constructor.prototype
+            value.constructor.prototype.constructor = value.constructor
+            delete value.constructor
             return value
         }
         if (cache?.type !== 'bind') delete fMap[node?.id?.name]
@@ -411,6 +413,7 @@ function BreakStatement(node, env) {
 }
 
 function Program(node, env) {
+    env['JSON'] = { value: JSON, kind: 'var' };
     node.body.forEach(stmt => hoist(stmt, env));
     node.body.forEach(stmt => evaluate(stmt, env));
 }
