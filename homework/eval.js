@@ -60,7 +60,7 @@ function updateValue(name, value, env) {
     }
 
     if (name in scope) {
-        scope[name].value = value
+        return scope[name].value = value
     } else {
         const root = getRoot(env)
         if (root[name]) {
@@ -185,26 +185,26 @@ function ArrowFunctionExpression(node, env) {
 function AssignmentExpression(node, env) {
     const scope = env.currentClosure ?? env
     const { left, right } = node
-    const rightVal = evaluate(right, env);
 
     if (left.type === 'Identifier') {
-        if (scope[left.name]?.kind === 'const') {
-            throw new TypeError('Assignment to constant variable');
-        }
+        if (scope[left.name]?.kind === 'const') throw new TypeError('Assignment to constant variable');
+        const rightVal = evaluate(right, env);
         let value = rightVal
         if (node.operator !== '=') {
             value = eval(`${evaluate(left, env)} ${node.operator.slice(0, -1)} ${rightVal}`)
         }
-        updateValue(left.name, value, env)
-        return value
+        return updateValue(left.name, value, env)
     } else if (left.type === 'MemberExpression') {
-        const leftVal = evaluate(left.object, env);
-        leftVal[left.property.name] = rightVal
+        const sub = evaluate(left.object, env)
+        const rightVal = evaluate(right, env);
+        sub[left.property.name] = rightVal
         if (node.operator !== '=') {
-            leftVal[left.property.name] = eval(`${evaluate(left, env)} ${node.operator.slice(0, -1)} ${rightVal}`)
+            sub[left.property.name] = eval(`${evaluate(left, env)} ${node.operator.slice(0, -1)} ${rightVal}`)
         }
-        return leftVal[left.property.name]
+        return sub[left.property.name]
     };
+
+
     throw new Error(`AssignmentExpression, left type ${node.left.type}`)
 }
 
@@ -240,8 +240,8 @@ function VariableDeclaration(node, env) {
         if (kind === 'var') {
             if (['global'].includes(name)) return
             let root = env;
-            while(root && root.parent && root['global']?.type !== 'function') {
-              root = root.parent
+            while (root && root.parent && root['global']?.type !== 'function') {
+                root = root.parent
             }
             root[name] = { value, kind };
         }
