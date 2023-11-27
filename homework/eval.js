@@ -114,8 +114,8 @@ function CallExpression(node, env) {
     const args = node.arguments.map((a) => evaluate(a, env));
     const callee = evaluate(node.callee, env);
     if (!callee) {
-        if(node.optional) return;
-        else throw new TypeError(`Uncaught TypeError: ${''} is not a function at Location ${node.start} ${node.end}`)
+        if (node.optional) return
+        throw new TypeError(`Uncaught TypeError: ${''} is not a function at Location ${node.start} ${node.end}`)
     }
     return callee(...args);
 }
@@ -437,10 +437,7 @@ function ThisExpression(node, env) {
 function FunctionDeclaration(node, env) {
     const scope = env.currentClosure ?? env
     node.type = 'FunctionExpression'
-    const callee = evaluate(node, env)
-    const fn = function (...args) {
-        return callee(...args)
-    }
+    const fn = evaluate(node, env)
     configureFu(fn, node)
     scope[node.id.name] = { value: fn, kind: 'var' }
 }
@@ -455,7 +452,7 @@ function NewExpression(node, env) {
 function MetaProperty(node, env) {
     const scope = env.currentClosure ?? env;
     if (node.meta.name === 'new' && node.property.name === 'target') {
-        return scope['global'].value.constructor
+        return scope['global'].value?.constructor
     }
 }
 
