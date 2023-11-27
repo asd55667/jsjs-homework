@@ -113,7 +113,10 @@ function LogicalExpression(node, env) {
 function CallExpression(node, env) {
     const args = node.arguments.map((a) => evaluate(a, env));
     const callee = evaluate(node.callee, env);
-    if (!callee) return
+    if (!callee) {
+        if(node.optional) return;
+        else throw new TypeError(`Uncaught TypeError: ${''} is not a function at Location ${node.start} ${node.end}`)
+    }
     return callee(...args);
 }
 
@@ -236,7 +239,10 @@ function VariableDeclaration(node, env) {
         const value = decl.init ? evaluate(decl.init, env) : undefined
         if (kind === 'var') {
             if (['global'].includes(name)) return
-            const root = getRoot(env)
+            let root = env;
+            while(root && root.parent && root['global']?.type !== 'function') {
+              root = root.parent
+            }
             root[name] = { value, kind };
         }
         if (name in scope && scope[name].kind === 'const') throw new Error(`Uncaught SyntaxError: Identifier ${name} has already been declared`);
@@ -311,6 +317,8 @@ function FunctionExpression(node, env) {
         const cache = fMap[node?.id?.name]
         const scope = createClosure(env);
         scope['global'] = cache ? { value: cache.self } : { value: this }
+        scope['global'].type = 'function'
+
         for (let i in node.params) {
             scope[node.params[i].name] = { value: args[i], kind: 'let' };
         }

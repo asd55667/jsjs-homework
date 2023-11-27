@@ -11,8 +11,8 @@
     "ava": "^4.0.1"
   },
   "scripts": {
-    "test-final-unit": "ava final/test/prototype.test.js -w",
-    "test-final": "ava final/test/(o|l|r|c|i|n|s|h|b|w|u|d|fo|tr|ar|ass)* homework/(2|3)/eval.test.js -w",
+    "test-final-unit": "ava final/test/function -w",
+    "test-final": "ava final/test/(o|l|r|c|i|n|s|h|b|w|u|d|p|fo|tr|ar|ass)* homework/(2|3)/eval.test.js -w",
     "test-homework-1": "ava homework/1/rename.test.js"
   }
 }

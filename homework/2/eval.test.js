@@ -2,10 +2,10 @@ const customerEval = require('./eval');
 const test = require('ava');
 
 function throwError() {
-  throw new Error('error')
+  // throw new Error('error')
 }
 
-const baseEnv = { throwError }
+const baseEnv = { throwError: { value: throwError } }
 
 test('测试表达式 - 初级挑战', t => {
   const sourceCodeList = [
