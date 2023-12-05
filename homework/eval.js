@@ -1,6 +1,7 @@
 const isFunc = (v) => typeof v === 'function'
 
 const fMap = Object.create(null);
+let yieldResult = []
 
 function getMemberData(node, env) {
     let member = node
@@ -225,26 +226,26 @@ function IfStatement(node, env) {
 }
 
 function BlockStatement(node, env) {
+    yieldResult = []
     !node.scope ? createClosure(env) : env
     for (const stmt of node.body) hoist(stmt, env);
     if (!node.generator) node.body.forEach(stmt => evaluate(stmt, env));
     else {
         let ignoreLast = false
-        const generatorItems = []
-        for (const stmt of node.body) {
-            try {
-                evaluate(stmt, env);
-            } catch (err) {
-                if (err.type === 'return') ignoreLast = true
-                if (['yield', 'return'].includes(err?.type)) generatorItems.push(err.value);
-                else throw err
+        try {
+            for (const stmt of node.body) evaluate(stmt, env);
+        } catch (err) {
+            if (err.type === 'return') {
+                ignoreLast = true;
+                yieldResult.push(err.value)
             }
+            else throw err
         }
-        const iterator = generatorItems.entries()
+        const iterator = yieldResult.entries();
         const value = {
             next: () => {
                 let { done, value } = iterator.next()
-                if (ignoreLast && value?.[0] === generatorItems.length - 1) done = true
+                if (ignoreLast && value?.[0] === yieldResult.length - 1) done = true
                 value = value ? value[1] : undefined
                 return { done, value }
             }
@@ -519,7 +520,7 @@ function DoWhileStatement(node, env) {
 
 function YieldExpression(node, env) {
     const value = evaluate(node.argument, env);
-    throw { type: 'yield', value }
+    yieldResult.push(value);
 }
 
 function evaluate(node, env) {
