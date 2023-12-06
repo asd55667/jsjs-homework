@@ -344,6 +344,7 @@ function FunctionExpression(node, env) {
         const cache = fMap[node?.id?.name]
         const scope = createClosure(env);
         scope['global'] = cache ? { value: cache.self } : { value: this }
+        scope['global']['new'] = cache?.type === 'new' ? { value: cache.self } : { value: new.target ? this : undefined }
         scope['global'].type = 'function'
 
         for (let i in node.params) {
@@ -482,7 +483,7 @@ function NewExpression(node, env) {
 function MetaProperty(node, env) {
     const scope = env.currentClosure ?? env;
     if (node.meta.name === 'new' && node.property.name === 'target') {
-        return scope['global'].value?.constructor
+        return scope['global']['new']?.value?.constructor
     }
 }
 
