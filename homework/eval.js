@@ -175,7 +175,10 @@ function ArrowFunctionExpression(node, env) {
         try {
             res = evaluate(node.body, { ...env });
         } catch (err) {
-            if (err.type === 'return') res = err.value
+            if (err.type === 'return') {
+                res = err.value
+                if (node.async && !(res instanceof Promise)) res = Promise.resolve(res)
+            }
             else throw err
         }
         dropClosure(env)
@@ -352,7 +355,10 @@ function FunctionExpression(node, env) {
         try {
             res = evaluate(node.body, { ...scope });
         } catch (err) {
-            if (err.type === 'return') res = err.value
+            if (err.type === 'return') {
+                res = err.value
+                if (node.async && !(res instanceof Promise)) res = Promise.resolve(res)
+            }
             else throw err;
         }
         if (cache?.type === 'new' && !res) {
@@ -447,6 +453,7 @@ function BreakStatement(node, env) {
 
 function Program(node, env) {
     env['JSON'] = { value: JSON, kind: 'var' };
+    env['Promise'] = { value: Promise, kind: 'var' };
     node.body.forEach(stmt => hoist(stmt, env));
     node.body.forEach(stmt => evaluate(stmt, env));
 }
@@ -461,8 +468,7 @@ function ThisExpression(node, env) {
 
 function FunctionDeclaration(node, env) {
     const scope = env.currentClosure ?? env
-    node.type = 'FunctionExpression'
-    const fn = evaluate(node, env)
+    const fn = FunctionExpression(node, env)
     scope[node.id.name] = { value: fn, kind: 'var' }
 }
 
@@ -521,6 +527,10 @@ function DoWhileStatement(node, env) {
 function YieldExpression(node, env) {
     const value = evaluate(node.argument, env);
     yieldResult.push(value);
+}
+
+async function AwaitExpression(node, env) {
+    return await evaluate(node.argument, env);
 }
 
 function evaluate(node, env) {
